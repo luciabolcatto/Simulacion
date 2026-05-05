@@ -1,0 +1,3 @@
+grafico_n100_c1.png --> Inestabilidad inicial con pocas tiradas
+grafico_n10000_c1.png --> Convergencia a largo plazo con muchas tiradas
+grafico_n1000_c10.png --> multiples ruletas simultaneas
