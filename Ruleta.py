@@ -31,7 +31,7 @@ def simular(n_tiradas, n_corridas, elegido):
         # Graficamos la línea de esta corrida específica
         plt.plot(range(1, n_tiradas + 1), frecuencias, alpha=0.6)
 
-    # Agregamos la línea roja teórica para comparar [cite: 131, 186]
+    # línea roja teórica para comparar 
     plt.axhline(y=fr_esperada, color='red', linestyle='--', label=f'Teórico: {fr_esperada:.3f}')
     
     plt.title(f"Simulación: {n_corridas} corridas de {n_tiradas} tiradas (Número: {elegido})")
