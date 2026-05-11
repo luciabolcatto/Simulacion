@@ -151,7 +151,8 @@ def graficar_corrida_individual(frn, vpn, vdn, vvn,
 
 
 def graficar_multiples_corridas(todas_frn, todas_vpn, todas_vdn, todas_vvn,
-                                 n_tiradas, numero_elegido, n_corridas):
+                                n_tiradas, numero_elegido, n_corridas):
+    
     """
     Figura 2 (mínimo requerido): 4 subgráficas con TODAS las corridas
     superpuestas. Permite apreciar la dispersión entre corridas y la
@@ -178,26 +179,32 @@ def graficar_multiples_corridas(todas_frn, todas_vpn, todas_vdn, todas_vvn,
          VARIANZA_ESPERADA,f'vve = {VARIANZA_ESPERADA:.4f}'),
     ]
 
+    mostrar_corridas = n_corridas <= 30
+
     for todas_series, ax, titulo, ylabel, esperado, label_esp in grupos:
         for i, serie in enumerate(todas_series):
-            ax.plot(eje_x, serie, color=colors[i % 10],
-                    linewidth=0.7, alpha=0.75, label=f'Corrida {i+1}')
+            if mostrar_corridas:
+                ax.plot(eje_x, serie, color=colors[i % 10],
+                        linewidth=0.7, alpha=0.75, label=f'Corrida {i+1}')
+            else:
+                ax.plot(eje_x, serie, color=colors[i % 10],
+                        linewidth=0.7, alpha=0.75)
+
         ax.axhline(esperado, color='black', linewidth=2,
                    linestyle='--', label=label_esp)
         ax.set_title(titulo)
         ax.set_xlabel('n (número de tiradas)')
         ax.set_ylabel(ylabel)
-        ax.legend(fontsize=7, ncol=2)
+        ax.legend(fontsize=7, ncol=2 if mostrar_corridas else 1)
         ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    fname = f"multiples_corridas_n{n_tiradas}_e{numero_elegido}.png"
+    fname = f"multiples_corridas_c{n_corridas}_n{n_tiradas}_e{numero_elegido}.png"
     plt.savefig(fname, dpi=150, bbox_inches='tight')
-    print(f"  → Guardado: {fname}")
+    print(f"  -> Guardado: {fname}")
     plt.close()
 
-
-def graficar_histograma_finales(todas_frn, n_corridas, numero_elegido):
+def graficar_histograma_finales(todas_frn, n_corridas, n_tiradas, numero_elegido):
     """
     Histograma de los valores FINALES de la frecuencia relativa
     (uno por corrida). Permite visualizar la distribución de los
@@ -223,7 +230,7 @@ def graficar_histograma_finales(todas_frn, n_corridas, numero_elegido):
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    fname = f"histograma_finales_e{numero_elegido}.png"
+    fname = f"histograma_finales_c{n_corridas}_n{n_tiradas}_e{numero_elegido}.png"
     plt.savefig(fname, dpi=150, bbox_inches='tight')
     print(f"  → Guardado: {fname}")
     plt.close()
@@ -306,6 +313,7 @@ def main():
     todas_frn, todas_vpn, todas_vdn, todas_vvn = [], [], [], []
 
     # Corridas individuales
+    cant_grafs_indiv = 1
     for c in range(1, n_corridas + 1):
         print(f"Simulando corrida {c}/{n_corridas}...")
         frn, vpn, vdn, vvn = simular_corrida(n_tiradas, numero_elegido)
@@ -313,8 +321,9 @@ def main():
         todas_vpn.append(vpn)
         todas_vdn.append(vdn)
         todas_vvn.append(vvn)
-        graficar_corrida_individual(frn, vpn, vdn, vvn,
-                                    n_tiradas, numero_elegido, c)
+        if c < cant_grafs_indiv:
+            graficar_corrida_individual(frn, vpn, vdn, vvn,
+                                        n_tiradas, numero_elegido, c)
 
     # Gráfica comparativa de todas las corridas
     print("\nGenerando gráfica comparativa de todas las corridas...")
@@ -323,7 +332,7 @@ def main():
 
     # Histograma de valores finales
     print("Generando histograma de frecuencias relativas finales...")
-    graficar_histograma_finales(todas_frn, n_corridas, numero_elegido)
+    graficar_histograma_finales(todas_frn, n_corridas, n_tiradas, numero_elegido)
 
     # Resumen en consola
     imprimir_resumen(todas_frn, todas_vpn, todas_vdn, todas_vvn,
