@@ -223,7 +223,7 @@ def graficar_histograma_finales(todas_frn, n_corridas, numero_elegido):
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    fname = f"histograma_finales_n{numero_elegido}.png"
+    fname = f"histograma_finales_e{numero_elegido}.png"
     plt.savefig(fname, dpi=150, bbox_inches='tight')
     print(f"  → Guardado: {fname}")
     plt.close()
@@ -302,7 +302,7 @@ def main():
     print("  TP 1.1 — Simulación de Ruleta Europea — UTN FRRO")
     print(f"  Corridas: {n_corridas} | Tiradas: {n_tiradas} | Número: {numero_elegido}")
     print(f"{'='*58}\n")
-
+    print("Para cambiar los parámetros utilice -c, -n y -e")
     todas_frn, todas_vpn, todas_vdn, todas_vvn = [], [], [], []
 
     # Corridas individuales
