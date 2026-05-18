@@ -153,6 +153,8 @@ class Labouchere(Strategy):
 # -----------------------------
 # Simulación de una corrida
 # -----------------------------
+# --- Reemplazar/actualizar estas funciones en tu código ---
+
 def simular_corrida(n: int,
                  strategy: Strategy,
                  bet_type: str,
@@ -160,18 +162,20 @@ def simular_corrida(n: int,
                  capital_mode: str,
                  initial_capital: Optional[float] = None,
                  stop_on_bankruptcy: bool = True,
-                 rng_seed: Optional[int] = None) -> Tuple[List[float], List[int], int]:
+                 rng_seed: Optional[int] = None) -> Tuple[List[float], List[float], List[float], int]:
     """
     Returns:
-      capitals: cant de capital dsps de cada iteracion de ruleta
-      wins: muestra 0 o 1 si gana la apuesta o no
-      bankruptcies: cant de bancarrotas en la corrida
+      capitals: cantidad de capital después de cada iteración de ruleta
+      wins: 1.0 si gana, 0.0 si pierde, np.nan si la corrida terminó antes de esa tirada
+      bet_amounts: monto apostado en cada tirada (np.nan para tiradas inexistentes)
+      bankruptcies: cantidad de bancarrotas en la corrida
     """
     if rng_seed is not None:
         random.seed(rng_seed)
     r = Roulette()
-    capitals = []
-    wins = []
+    capitals: List[float] = []
+    wins: List[float] = []
+    bet_amounts: List[float] = []
     bankruptcies = 0
 
     capital = float('inf') if capital_mode == 'i' else float(initial_capital)
@@ -179,10 +183,13 @@ def simular_corrida(n: int,
 
     for spin_idx in range(n):
         bet_amt = strategy.bet_amount()
-        # If bet 0 (Labouchere finished), stop
+        # record the intended bet amount (may be adjusted later if insufficient capital)
+        bet_amounts.append(float(bet_amt) if bet_amt is not None else np.nan)
+
+        # If bet 0 (Labouchere finished), stop — mark remaining wins as NaN
         if bet_amt <= 0:
             capitals.append(capital)
-            wins.append(0)
+            wins.append(np.nan)
             break
 
         # if capital bounded and insufficient funds:
@@ -190,9 +197,9 @@ def simular_corrida(n: int,
             # bankrupt if cannot cover next bet
             bankruptcies += 1
             if stop_on_bankruptcy:
-                # record state and break
+                # record state and break; mark this spin's win as NaN (no spin occurred)
                 capitals.append(0.0)
-                wins.append(0)
+                wins.append(np.nan)
                 break
             else:
                 # bet whatever remains
@@ -200,11 +207,11 @@ def simular_corrida(n: int,
 
         spin = r.spin()
         is_win = evaluate_bet(bet_type, bet_choice, spin)
-        wins.append(1 if is_win else 0)
+        wins.append(1.0 if is_win else 0.0)
 
         if is_win:
             ret = payout_multiplier(bet_type) * bet_amt
-            # net profit = ret - bet_amt = (multiplier -1)*bet_amt
+            # net profit = ret - bet_amt
             net = ret - bet_amt
             if capital_mode == 'f':
                 capital += net
@@ -216,16 +223,28 @@ def simular_corrida(n: int,
                     bankruptcies += 1
                     if stop_on_bankruptcy:
                         capitals.append(capital)
+                        # corrida terminó tras perder y quedar en 0; no hay resultado para siguiente tirada
                         break
 
         strategy.record_result(is_win)
         capitals.append(capital if capital_mode == 'f' else float('inf'))
 
-    return capitals, wins, bankruptcies
+    # pad bet_amounts and wins to length n if stopped early using np.nan
+    if len(bet_amounts) < n:
+        pad_val_bet = np.nan
+        bet_amounts = bet_amounts + [pad_val_bet] * (n - len(bet_amounts))
 
-# -----------------------------
-# Ejecutar multiples corridas
-# -----------------------------
+    if len(wins) < n:
+        wins = wins + [np.nan] * (n - len(wins))
+
+    # pad capitals to length n using last known capital (keeps last state)
+    if len(capitals) < n:
+        pad_val_cap = capitals[-1] if capitals else (0.0 if capital_mode == 'f' else float('inf'))
+        capitals = capitals + [pad_val_cap] * (n - len(capitals))
+
+    return capitals, wins, bet_amounts, bankruptcies
+
+
 def multiple_runs(c: int,
                   n: int,
                   strategy_name: str,
@@ -247,10 +266,11 @@ def multiple_runs(c: int,
 
     all_capitals = []
     all_wins = []
+    all_bets = []
     bankruptcies_total = 0
     for i in range(c):
         strat = strategy_map[strategy_name]()
-        capitals, wins, bankruptcies = simular_corrida(
+        capitals, wins, bet_amounts, bankruptcies = simular_corrida(
             n=n,
             strategy=strat,
             bet_type=bet_type,
@@ -260,24 +280,50 @@ def multiple_runs(c: int,
             stop_on_bankruptcy=True,
             rng_seed=(None if rng_seed is None else rng_seed + i)
         )
-        # Pad capitals to length n for easier aggregation
+
+        # Ensure lengths are exactly n (simular_corrida already pads, but por seguridad)
         if len(capitals) < n:
-            pad_val = capitals[-1] if capitals else (0.0 if capital_mode == 'f' else float('inf'))
-            capitals = capitals + [pad_val] * (n - len(capitals))
-            wins = wins + [0] * (n - len(wins))
+            pad_val_cap = capitals[-1] if capitals else (0.0 if capital_mode == 'f' else float('inf'))
+            capitals = capitals + [pad_val_cap] * (n - len(capitals))
+        if len(wins) < n:
+            wins = wins + [np.nan] * (n - len(wins))
+        if len(bet_amounts) < n:
+            bet_amounts = bet_amounts + [np.nan] * (n - len(bet_amounts))
+
         all_capitals.append(capitals)
         all_wins.append(wins)
+        all_bets.append(bet_amounts)
         bankruptcies_total += bankruptcies
 
-    return np.array(all_capitals), np.array(all_wins), bankruptcies_total
+    # Convert to numpy arrays (float dtype to hold np.nan)
+    return np.array(all_capitals, dtype=float), np.array(all_wins, dtype=float), np.array(all_bets, dtype=float), bankruptcies_total
 
-# -----------------------------
-# Graficar resultados
-# -----------------------------
-def plot_results(all_capitals: np.ndarray, all_wins: np.ndarray, params):
+
+
+def theoretical_params_for_bet(bet_type: str):
+    #Devuelve (p_win, multiplier) según bet_type asumiendo ruleta europea (37 casillas: 0 + 1-36).
+    #Multipliers: total returned including la apuesta original.
+  
+    if bet_type == 'color' or bet_type == 'odd':
+        p_win = 18.0 / 37.0
+        multiplier = 2.0   #recibes 2 veces la apuesta (apuesta + ganancia)
+    elif bet_type == 'number':
+        p_win = 1.0 / 37.0
+        multiplier = 36.0  #recibes 36 veces la apuesta
+    elif bet_type == 'column':
+        p_win = 12.0 / 37.0
+        multiplier = 3.0   #recibes 3 veces la apuesta
+    else:
+        # fallback: asumir even-money
+        p_win = 18.0 / 37.0
+        multiplier = 2.0
+    return p_win, multiplier
+
+
+def plot_results(all_capitals: np.ndarray, all_wins: np.ndarray, all_bets: np.ndarray, params):
     initial_capital = params['initial_capital']
     capital_mode = params['a']
-    prefix = f"corridas{params['c']}_n{params['n']}_estrat_{params['bet_type']}_capital_{params['a']}"
+    prefix = f"corridas{params['c']}_n{params['n']}_estrat_{params['s']}_bet_{params['bet_type']}_capital_{params['a']}"
     
     c, n = all_capitals.shape
     # 1) Capital vs tirada (mostrar promedio y algunas corridas)
@@ -286,29 +332,54 @@ def plot_results(all_capitals: np.ndarray, all_wins: np.ndarray, params):
     for i in range(min(10, c)):
         plt.plot(range(1, n+1), all_capitals[i], color='gray', alpha=0.4)
     plt.plot(range(1, n+1), avg_capital, color='red', linewidth=2, label='Promedio')
+
+    """# Calcular línea de capital esperado final (horizontal) usando parámetros teóricos y promedio de apuestas por tirada
+    p_win, multiplier = theoretical_params_for_bet(params['bet_type'])
+    expected_net_per_unit = p_win * multiplier - 1.0  # neto esperado por unidad apostada
+    # promedio de apuesta por tirada (promedio entre corridas)
+    avg_bet_per_spin = np.mean(all_bets, axis=0)  # shape (n,)
+    # capital esperado por tirada (acumulado)
+    expected_capital_traj = np.array(initial_capital) + np.cumsum(avg_bet_per_spin * expected_net_per_unit)
+    expected_final_capital = expected_capital_traj[-1]
+    # Dibujar línea horizontal en el valor esperado final
+    plt.axhline(expected_final_capital, color='blue', linestyle='--', linewidth=2,
+                label=f'Capital esperado final (teórico): {expected_final_capital:.2f}')
+                """
+    
+    # Dibujar línea horizontal capital inicial
+    capital_inicial = np.array(initial_capital)
+    plt.axhline(initial_capital, color='red', linestyle='--', linewidth=2,
+                label=f'Capital inicial: {initial_capital:.2f}')
     plt.xlabel('Número de tirada')
     plt.ylabel('Capital' + ('' if capital_mode == 'i' else f' (inicio {initial_capital})'))
     plt.title('Capital vs Número de tirada')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    #plt.show()
     fcapname = f"{prefix}_GRAF_CAPITAL.png"
     plt.savefig(fcapname, dpi=150, bbox_inches='tight')
+    plt.close()
 
     # 2) Histograma de frecuencia relativa de obtener apuesta favorable por tirada (promedio por tirada)
-    win_freq_per_spin = np.mean(all_wins, axis=0)  # entre 0 y 1
+    win_freq_per_spin = np.nanmean(all_wins, axis=0)  # entre 0 y 1
     plt.figure(figsize=(10,5))
     plt.bar(range(1, n+1), win_freq_per_spin, width=0.8)
+    
+    # Línea horizontal con probabilidad teórica de ganar
+    p_win, _ = theoretical_params_for_bet(params['bet_type'])
+    plt.axhline(p_win, color='blue', linestyle='--', linewidth=2,
+                label=f'Probabilidad teórica de ganar: {p_win:.4f}')
+
     plt.xlabel('Número de tirada')
     plt.ylabel('Frecuencia relativa de apuesta favorable')
     plt.title('Frecuencia relativa de obtener apuesta favorable según tirada')
+    plt.legend()
     plt.tight_layout()
-    #plt.show()
     fhistname = f"{prefix}_GRAF_APUESTA.png"
     plt.savefig(fhistname, dpi=150, bbox_inches='tight')
+    plt.close()
 
-    # 3) Opcional: histograma de resultados finales
+    # 3) Histograma de resultados finales
     final_capitals = all_capitals[:, -1]
     if capital_mode == 'f':
         plt.figure(figsize=(8,4))
@@ -316,10 +387,82 @@ def plot_results(all_capitals: np.ndarray, all_wins: np.ndarray, params):
         plt.xlabel('Capital final')
         plt.ylabel('Densidad / Frecuencia relativa')
         plt.title('Histograma de capital final')
+        plt.legend()
         plt.tight_layout()
-        plt.show()
         fhistcapname = f"{prefix}_GRAF_HISTOGRAMA_CAPITAL.png"
         plt.savefig(fhistcapname, dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    # 4) Curva de supervivencia simple (Kaplan Meier estilo)
+    
+    alive = (all_capitals > 0)  # True si capital > 0 en esa tirada
+    survival = np.sum(alive, axis=0) / alive.shape[0]
+
+    plt.figure(figsize=(10,5))
+    plt.step(range(1, survival.size+1), survival, where='post', label='Supervivencia empírica')
+    plt.xlabel('Número de tirada')
+    plt.ylabel('Fracción de corridas activas')
+    plt.title('Curva de supervivencia hasta bancarrota')
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    fsurvname = f"{prefix}_GRAF_SUPERVIVENCIA.png"
+    plt.savefig(fsurvname, dpi=150, bbox_inches='tight')
+    #plt.show()
+    plt.close()
+
+    # 5)
+    percentiles = [10, 25, 50, 75, 90]
+    qs = np.nanpercentile(all_capitals, percentiles, axis=0)  # shape (len(percentiles), n)
+
+    plt.figure(figsize=(10,6))
+    x = np.arange(1, qs.shape[1]+1)
+    plt.fill_between(x, qs[0], qs[-1], color='lightgreen', label='10-90 percentile')
+    plt.fill_between(x, qs[1], qs[-2], color='pink', label='25-75 percentile')
+    plt.plot(x, qs[2], color='red', linewidth=2, label='Mediana')
+    plt.xlabel('Número de tirada')
+    plt.ylabel('Capital')
+    plt.title('Trayectorias percentiles de capital')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    fpercname = f"{prefix}_GRAF_PERCENTIL_CAPITAL.png"
+    plt.savefig(fpercname, dpi=150, bbox_inches='tight')
+    plt.close()
+
+    # 6) histograma tiempo hasta bancarrota
+
+    times_to_bankrupt = []
+    for row in all_capitals:
+        zeros = np.where(row == 0)[0]
+        times_to_bankrupt.append(zeros[0]+1 if zeros.size>0 else np.nan)
+    times_to_bankrupt = np.array(times_to_bankrupt)
+
+    plt.figure(figsize=(8,4))
+    plt.hist(times_to_bankrupt[~np.isnan(times_to_bankrupt)], bins=30, density=False, alpha=0.7)
+    plt.xlabel('Tiradas hasta bancarrota')
+    plt.ylabel('Frecuencia')
+    plt.title('Distribución del tiempo hasta bancarrota')
+    plt.tight_layout()
+    fhisthastaquebrarname = f"{prefix}_GRAF_TIEMPO_HASTA_BANCARROTA.png"
+    plt.savefig(fhisthastaquebrarname, dpi=150, bbox_inches='tight')
+    plt.close()
+
+    # 7) Boxplots en hitos (cada 50, 100, 250 o la ultima antes de quebrar)
+    hitos = [50, 100, 250, all_capitals.shape[1]-1]
+    data = [all_capitals[:, h-1][~np.isnan(all_capitals[:, h-1])] for h in hitos]
+    plt.figure(figsize=(8,5))
+    plt.boxplot(data, tick_labels=[str(h) for h in hitos], showfliers=True)
+    plt.xlabel('Tirada')
+    plt.ylabel('Capital')
+    plt.title('Boxplot de capital en tiradas clave')
+    plt.grid(True)
+    plt.tight_layout()
+    fboxplothitosname = f"{prefix}_GRAF_BOXPLOT_HITOS.png"
+    plt.savefig(fboxplothitosname, dpi=150, bbox_inches='tight')
+    plt.close()
+
+
 
 # -----------------------------
 # Interfaz principal (main)
@@ -338,7 +481,7 @@ def main():
         'e': 7,
         'bet_type': 'color',  # 'color','number','column','odd'
         'bet_choice': 'red',  # depends on bet_type; for number use params['e']
-        'initial_capital': 1000.0,
+        'initial_capital': 100.0,
         'base_bet': 1,
         'labouchere_seq': [1,2,3,4]
     }
@@ -349,7 +492,7 @@ def main():
     else:
         bet_choice = params['bet_choice']
 
-    all_capitals, all_wins, bankruptcies_total = multiple_runs(
+        all_capitals, all_wins, all_bets, bankruptcies_total = multiple_runs(
         c=params['c'],
         n=params['n'],
         strategy_name=params['s'],
@@ -366,7 +509,7 @@ def main():
     print(f"Estrategia: {params['s']}, Tipo apuesta: {params['bet_type']}, Modo capital: {params['a']}")
     print(f"Bancarrotas totales: {bankruptcies_total}")
 
-    plot_results(all_capitals, all_wins, params)
+    plot_results(all_capitals, all_wins, all_bets, params)
 
 if __name__ == "__main__":
     main()
