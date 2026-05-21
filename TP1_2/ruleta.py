@@ -142,28 +142,25 @@ class Paroli(Strategy):
 # -------------------------------------------------------------
 # Simulación de una corrida experimental
 # -------------------------------------------------------------
-def simular_corrida(n: int, strategy: Strategy, bet_type: str, bet_choice, 
+def simular_corrida(n: int, strategy: Strategy, bet_type: str, bet_choice,
                     capital_mode: str, initial_capital: float) -> Tuple[List[float], List[float]]:
     r = Roulette()
     capitals: List[float] = []
     wins: List[float] = []
-    
-    # Límite máximo de apuesta de la mesa por seguridad
-    limite_mesa = 500.0
 
-    capital = float('inf') if capital_mode == 'i' else float(initial_capital)
+    limite_mesa = 500.0
     strategy.reset()
 
-    # Punto inicial del Flujo de caja inicial (fci)
-    capitals.append(initial_capital if capital_mode == 'f' else 0.0)
+    if capital_mode == 'f':
+        capital = float(initial_capital)
+        capitals.append(capital)
+    else:
+        neto = 0.0
+        capitals.append(neto)
 
     for spin_idx in range(n):
-        bet_amt = strategy.bet_amount()
-        
-        if bet_amt > limite_mesa:
-            bet_amt = limite_mesa
+        bet_amt = min(strategy.bet_amount(), limite_mesa)
 
-        # Verificación de quiebra / fondos insuficientes
         if capital_mode == 'f' and bet_amt > capital:
             break
 
@@ -173,20 +170,18 @@ def simular_corrida(n: int, strategy: Strategy, bet_type: str, bet_choice,
 
         if is_win:
             net_profit = (payout_multiplier(bet_type) * bet_amt) - bet_amt
-            if capital_mode == 'f':
-                capital += net_profit
-            else:
-                capital += net_profit  # En infinito medimos balance neto acumulado
         else:
-            if capital_mode == 'f':
-                capital -= bet_amt
-            else:
-                capital -= bet_amt
+            net_profit = -bet_amt
+
+        if capital_mode == 'f':
+            capital += net_profit
+            capitals.append(capital)
+        else:
+            neto += net_profit
+            capitals.append(neto)
 
         strategy.record_result(is_win)
-        capitals.append(capital if capital_mode == 'f' else float(capital))
 
-    # Padding para completar n iteraciones si hubo bancarrota prematura
     while len(capitals) <= n:
         capitals.append(capitals[-1])
     while len(wins) < n:
@@ -273,15 +268,29 @@ def plot_results(all_capitals: np.ndarray, all_wins: np.ndarray, params):
     
     # ── GRÁFICA 2: Flujo de Caja Multi-corrida Simultánea (fc) ──
     for i in range(c):
-        ax_fc.plot(eje_x_fc, all_capitals[i], color=colores[i % 10], linewidth=0.9, alpha=0.75, label=f'Corrida {i+1}')
-    
-    fci_valor = initial_capital if capital_mode == 'f' else 0.0
-    ax_fc.axhline(fci_valor, color='blue', linestyle='-', linewidth=2, label=f'fci (Flujo Inicial = {fci_valor:.0f})')
-    
+        serie = all_capitals[i]
+
+        if capital_mode == 'i':
+            ax_fc.plot(eje_x_fc, serie, color=colores[i % 10], linewidth=0.9,
+                       alpha=0.75, label=f'Corrida {i+1}')
+        else:
+            ax_fc.plot(eje_x_fc, serie, color=colores[i % 10], linewidth=0.9,
+                       alpha=0.75, label=f'Corrida {i+1}')
+
     if capital_mode == 'f':
-        ax_fc.axhline(0.0, color='darkred', linestyle=':', linewidth=1.5, label='Línea de Bancarrota')
-        
-    ax_fc.set_title("Evolución del Flujo de Caja (cc)")
+        ax_fc.axhline(initial_capital, color='blue', linestyle='-', linewidth=2,
+                      label=f'Capital inicial = {initial_capital:.0f}')
+        ax_fc.axhline(0.0, color='darkred', linestyle=':', linewidth=1.5,
+                      label='Línea de bancarrota')
+        ax_fc.set_ylabel("Capital")
+        ax_fc.set_title("Evolución del Capital")
+    else:
+        ax_fc.axhline(0.0, color='blue', linestyle='-', linewidth=2,
+                      label='Ganancia neta = 0')
+        ax_fc.set_ylabel("Ganancia neta acumulada")
+        ax_fc.set_title("Evolución de la Ganancia Neta Acumulada")    
+
+
     ax_fc.set_xlabel("n (número de tiradas)")
     ax_fc.set_ylabel("cc (cantidad de capital)")
     ax_fc.legend(fontsize=8, ncol=2)
@@ -341,7 +350,7 @@ def main():
     }
     
     plot_results(all_capitals, all_wins, plot_params)
-    print("\n¡Simulación completada! Imagen lista para subir a Overleaf.\n")
+    print("\n¡Simulación completada! Imagen lista.\n")
 
 if __name__ == "__main__":
     main()
