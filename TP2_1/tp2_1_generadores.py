@@ -11,10 +11,9 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from scipy import stats
 
-# ============================================================
+
 # GENERADOR 1: Congruencial Lineal (GCL)
 # Fórmula: X_{n+1} = (a * X_n + c) mod m
-# ============================================================
 
 class GCL:
     """
@@ -50,10 +49,8 @@ class GCL:
         return [self.siguiente() for _ in range(n)]
 
 
-# ============================================================
 # GENERADOR 2: Método de los Cuadrados Medios (von Neumann)
 # Fórmula: tomar el cuadrado del número, extraer dígitos del medio
-# ============================================================
 
 class CuadradosMedios:
     """
@@ -92,10 +89,7 @@ class CuadradosMedios:
             numeros.append(val)
         return numeros
 
-
-# ============================================================
 # GENERADOR 3: Python built-in (referencia)
-# ============================================================
 
 class PythonRandom:
     """Envoltorio del generador Mersenne Twister de Python."""
@@ -108,10 +102,7 @@ class PythonRandom:
     def generar(self, n):
         return [self.siguiente() for _ in range(n)]
 
-
-# ============================================================
 # TESTS DE CALIDAD
-# ============================================================
 
 def test_media(numeros, alpha=0.05):
     """
@@ -365,9 +356,7 @@ def correr_todos_los_tests(numeros, nombre):
     return resultados
 
 
-# ============================================================
 # VISUALIZACIONES
-# ============================================================
 
 def graficar_todo(generadores_data, nombre_archivo="graficas_tp.png"):
     """
@@ -457,9 +446,7 @@ def graficar_comparacion_periodo(nombre_archivo="comparacion_periodo.png"):
     plt.close()
 
 
-# ============================================================
 # TABLA RESUMEN
-# ============================================================
 
 def imprimir_tabla_resumen(todos_resultados):
     """
@@ -482,9 +469,7 @@ def imprimir_tabla_resumen(todos_resultados):
     print("="*88)
 
 
-# ============================================================
 # MAIN
-# ============================================================
 
 def main():
     N = 1000
