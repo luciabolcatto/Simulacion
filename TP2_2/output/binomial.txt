@@ -1,0 +1,8 @@
+Distribución binomial Bin(20,0.4)
+Media muestral: 8.046800
+Media teórica:   8.000000
+Var muestral:    4.912392
+Var teórica:     4.800000
+Chi2:            21.980023
+gl:              20
+p-valor:         0.341596

@@ -1,0 +1,8 @@
+Distribución hipergeométrica H(100,30,10)
+Media muestral: 3.007800
+Media teórica:   3.000000
+Var muestral:    1.943328
+Var teórica:     1.909091
+Chi2:            6.042709
+gl:              10
+p-valor:         0.811662

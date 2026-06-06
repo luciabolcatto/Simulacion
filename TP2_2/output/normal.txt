@@ -1,0 +1,5 @@
+Distribución normal N(0,1)
+Media muestral: 0.007137
+Media teórica:   0.000000
+Var muestral:    1.011100
+Var teórica:     1.000000

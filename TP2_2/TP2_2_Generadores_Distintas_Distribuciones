@@ -1,0 +1,350 @@
+import math
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import stats
+from pathlib import Path
+
+OUTDIR = Path("output")
+OUTDIR.mkdir(exist_ok=True)
+
+# =========================
+# GENERADORES
+# =========================
+
+def uniforme_continua(a, b, n, seed=12345):
+    rng = random.Random(seed)
+    return np.array([a + (b - a) * rng.random() for _ in range(n)], dtype=float)
+
+def exponencial(lam, n, seed=12345):
+    rng = random.Random(seed)
+    return np.array([-math.log(1 - rng.random()) / lam for _ in range(n)], dtype=float)
+
+def gamma_entera(alpha, beta, n, seed=12345):
+    rng = random.Random(seed)
+    out = []
+    for _ in range(n):
+        x = 0.0
+        for _ in range(int(alpha)):
+            x += -beta * math.log(1 - rng.random())
+        out.append(x)
+    return np.array(out, dtype=float)
+
+def normal_box_muller(mu, sigma, n, seed=12345):
+    rng = random.Random(seed)
+    muestras = []
+    while len(muestras) < n:
+        u1 = rng.random()
+        u2 = rng.random()
+        z1 = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+        z2 = math.sqrt(-2 * math.log(u1)) * math.sin(2 * math.pi * u2)
+        muestras.append(mu + sigma * z1)
+        if len(muestras) < n:
+            muestras.append(mu + sigma * z2)
+    return np.array(muestras, dtype=float)
+
+def binomial(n_ensayos, p, n, seed=12345):
+    rng = random.Random(seed)
+    out = []
+    for _ in range(n):
+        x = sum(1 for _ in range(n_ensayos) if rng.random() < p)
+        out.append(x)
+    return np.array(out, dtype=int)
+
+def poisson(lam, n, seed=12345):
+    rng = random.Random(seed)
+    L = math.exp(-lam)
+    out = []
+    for _ in range(n):
+        k = 0
+        p = 1.0
+        while p > L:
+            k += 1
+            p *= rng.random()
+        out.append(k - 1)
+    return np.array(out, dtype=int)
+
+def pascal(r, p, n, seed=12345):
+    rng = random.Random(seed)
+    out = []
+    for _ in range(n):
+        exitos = 0
+        fracasos = 0
+        while exitos < r:
+            if rng.random() < p:
+                exitos += 1
+            else:
+                fracasos += 1
+        out.append(fracasos)
+    return np.array(out, dtype=int)
+
+def hipergeometrica(N, K, n_muestra, n, seed=12345):
+    rng = random.Random(seed)
+    poblacion = np.array([1] * K + [0] * (N - K), dtype=int)
+    out = []
+    for _ in range(n):
+        elegido = rng.sample(list(poblacion), n_muestra)
+        out.append(int(sum(elegido)))
+    return np.array(out, dtype=int)
+
+def empirica_discreta(valores, probabilidades, n, seed=12345):
+    rng = random.Random(seed)
+    acumuladas = np.cumsum(probabilidades)
+    out = []
+    for _ in range(n):
+        u = rng.random()
+        for i, a in enumerate(acumuladas):
+            if u < a:
+                out.append(valores[i])
+                break
+    return np.array(out)
+
+# =========================
+# MÉTRICAS Y GRÁFICOS
+# =========================
+
+def media_varianza(x):
+    return float(np.mean(x)), float(np.var(x, ddof=1))
+
+def guardar_texto(nombre, texto):
+    with open(OUTDIR / nombre, "w", encoding="utf-8") as f:
+        f.write(texto)
+
+def plot_continua(nombre, muestras, bins, pdf_teorica=None, xs_pdf=None, titulo="", xlabel="x"):
+    plt.figure(figsize=(8, 5))
+    plt.hist(muestras, bins=bins, density=True, alpha=0.65, edgecolor="black", label="Muestra")
+    if pdf_teorica is not None and xs_pdf is not None:
+        plt.plot(xs_pdf, pdf_teorica(xs_pdf), "r-", lw=2, label="Teórica")
+    plt.title(titulo)
+    plt.xlabel(xlabel)
+    plt.ylabel("Densidad")
+    plt.grid(alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(OUTDIR / nombre, dpi=150, bbox_inches="tight")
+    plt.close()
+
+def plot_discreta(nombre, muestras, valores, probs_teoricas=None, titulo="", xlabel="x"):
+    plt.figure(figsize=(8, 5))
+    vals, counts = np.unique(muestras, return_counts=True)
+    freqs = counts / len(muestras)
+    plt.bar(vals, freqs, alpha=0.75, edgecolor="black", label="Muestra")
+    if probs_teoricas is not None:
+        plt.plot(valores, probs_teoricas, "ro-", lw=2, label="Teórica")
+    plt.title(titulo)
+    plt.xlabel(xlabel)
+    plt.ylabel("Frecuencia relativa")
+    plt.grid(axis="y", alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(OUTDIR / nombre, dpi=150, bbox_inches="tight")
+    plt.close()
+
+def ks_test_continuo(muestras, cdf):
+    return stats.kstest(muestras, cdf)
+
+def chi2_discreta(muestras, valores, probs):
+    obs = np.array([(muestras == v).sum() for v in valores], dtype=float)
+    exp = len(muestras) * np.array(probs, dtype=float)
+    chi2 = ((obs - exp) ** 2 / exp).sum()
+    gl = len(valores) - 1
+    p = 1 - stats.chi2.cdf(chi2, df=gl)
+    return chi2, gl, p, obs, exp
+
+# =========================
+# VALIDACIÓN POR DISTRIBUCIÓN
+# =========================
+
+def validar_uniforme(a=2, b=7, n=5000, seed=12345):
+    x = uniforme_continua(a, b, n, seed)
+    m, v = media_varianza(x)
+    mt, vt = (a + b) / 2, (b - a) ** 2 / 12
+    cdf = lambda t: np.where(t < a, 0.0, np.where(t > b, 1.0, (t - a) / (b - a)))
+    ks = ks_test_continuo(x, cdf)
+    txt = (
+        f"Distribución uniforme continua U({a},{b})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+        f"KS estadístico:   {ks.statistic:.6f}\n"
+        f"p-valor KS:       {ks.pvalue:.6f}\n"
+    )
+    guardar_texto("uniforme.txt", txt)
+    plot_continua(
+        "uniforme.png", x, bins=20,
+        pdf_teorica=lambda t: np.full_like(t, 1/(b-a), dtype=float),
+        xs_pdf=np.linspace(a, b, 200),
+        titulo=f"Uniforme continua U({a},{b})"
+    )
+
+def validar_exponencial(lam=1.5, n=5000, seed=12345):
+    x = exponencial(lam, n, seed)
+    m, v = media_varianza(x)
+    mt, vt = 1/lam, 1/(lam**2)
+    cdf = lambda t: np.where(t < 0, 0.0, 1 - np.exp(-lam * t))
+    ks = ks_test_continuo(x, cdf)
+    txt = (
+        f"Distribución exponencial Exp({lam})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+        f"KS estadístico:   {ks.statistic:.6f}\n"
+        f"p-valor KS:       {ks.pvalue:.6f}\n"
+    )
+    guardar_texto("exponencial.txt", txt)
+    xs = np.linspace(0, np.quantile(x, 0.99), 300)
+    plot_continua("exponencial.png", x, bins=25, pdf_teorica=lambda t: lam*np.exp(-lam*t), xs_pdf=xs,
+                  titulo=f"Exponencial Exp({lam})")
+
+def validar_gamma(alpha=3, beta=2, n=5000, seed=12345):
+    x = gamma_entera(alpha, beta, n, seed)
+    m, v = media_varianza(x)
+    mt, vt = alpha * beta, alpha * beta**2
+    xs = np.linspace(0, np.quantile(x, 0.99), 300)
+    pdf = lambda t: np.where(t > 0, (t**(alpha-1) * np.exp(-t/beta)) / (math.gamma(alpha) * beta**alpha), 0.0)
+    txt = (
+        f"Distribución gamma Gamma({alpha},{beta})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+    )
+    guardar_texto("gamma.txt", txt)
+    plot_continua("gamma.png", x, bins=25, pdf_teorica=pdf, xs_pdf=xs,
+                  titulo=f"Gamma({alpha},{beta})")
+
+def validar_normal(mu=0, sigma=1, n=5000, seed=12345):
+    x = normal_box_muller(mu, sigma, n, seed)
+    m, v = media_varianza(x)
+    mt, vt = mu, sigma**2
+    txt = (
+        f"Distribución normal N({mu},{sigma**2})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+    )
+    guardar_texto("normal.txt", txt)
+    xs = np.linspace(mu - 4*sigma, mu + 4*sigma, 400)
+    pdf = lambda t: (1/(sigma*np.sqrt(2*np.pi))) * np.exp(-((t-mu)**2)/(2*sigma**2))
+    plot_continua("normal.png", x, bins=30, pdf_teorica=pdf, xs_pdf=xs,
+                  titulo=f"Normal N({mu},{sigma**2})")
+
+def validar_binomial(n_ensayos=20, p=0.4, n=5000, seed=12345):
+    x = binomial(n_ensayos, p, n, seed)
+    m, v = media_varianza(x)
+    mt, vt = n_ensayos*p, n_ensayos*p*(1-p)
+    valores = np.arange(0, n_ensayos + 1)
+    probs = stats.binom.pmf(valores, n_ensayos, p)
+    chi2, gl, pv, obs, exp = chi2_discreta(x, valores, probs)
+    txt = (
+        f"Distribución binomial Bin({n_ensayos},{p})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+        f"Chi2:            {chi2:.6f}\n"
+        f"gl:              {gl}\n"
+        f"p-valor:         {pv:.6f}\n"
+    )
+    guardar_texto("binomial.txt", txt)
+    plot_discreta("binomial.png", x, valores, probs, titulo=f"Binomial Bin({n_ensayos},{p})")
+
+def validar_poisson(lam=4, n=5000, seed=12345):
+    x = poisson(lam, n, seed)
+    m, v = media_varianza(x)
+    mt, vt = lam, lam
+    valores = np.arange(0, int(max(x.max(), lam + 6 * math.sqrt(lam))) + 1)
+    probs = stats.poisson.pmf(valores, lam)
+    chi2, gl, pv, obs, exp = chi2_discreta(x, valores, probs)
+    txt = (
+        f"Distribución Poisson Pois({lam})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+        f"Chi2:            {chi2:.6f}\n"
+        f"gl:              {gl}\n"
+        f"p-valor:         {pv:.6f}\n"
+    )
+    guardar_texto("poisson.txt", txt)
+    plot_discreta("poisson.png", x, valores, probs, titulo=f"Poisson({lam})")
+
+def validar_pascal(r=5, p=0.4, n=5000, seed=12345):
+    x = pascal(r, p, n, seed)
+    m, v = media_varianza(x)
+    mt, vt = r*(1-p)/p, r*(1-p)/(p**2)
+    valores = np.arange(0, int(np.quantile(x, 0.99)) + 1)
+    probs = stats.nbinom.pmf(valores, r, p)
+    chi2, gl, pv, obs, exp = chi2_discreta(x, valores, probs)
+    txt = (
+        f"Distribución Pascal NegBin({r},{p})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+        f"Chi2:            {chi2:.6f}\n"
+        f"gl:              {gl}\n"
+        f"p-valor:         {pv:.6f}\n"
+    )
+    guardar_texto("pascal.txt", txt)
+    plot_discreta("pascal.png", x, valores, probs, titulo=f"Pascal NegBin({r},{p})")
+
+def validar_hipergeometrica(N=100, K=30, n_muestra=10, n=5000, seed=12345):
+    x = hipergeometrica(N, K, n_muestra, n, seed)
+    m, v = media_varianza(x)
+    mt = n_muestra * K / N
+    vt = n_muestra * (K/N) * (1 - K/N) * ((N - n_muestra) / (N - 1))
+    valores = np.arange(0, n_muestra + 1)
+    probs = stats.hypergeom.pmf(valores, N, K, n_muestra)
+    chi2, gl, pv, obs, exp = chi2_discreta(x, valores, probs)
+    txt = (
+        f"Distribución hipergeométrica H({N},{K},{n_muestra})\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+        f"Chi2:            {chi2:.6f}\n"
+        f"gl:              {gl}\n"
+        f"p-valor:         {pv:.6f}\n"
+    )
+    guardar_texto("hipergeometrica.txt", txt)
+    plot_discreta("hipergeometrica.png", x, valores, probs,
+                  titulo=f"Hipergeométrica H({N},{K},{n_muestra})")
+
+def validar_empirica():
+    valores = np.array([1, 2, 3, 4, 5])
+    probabilidades = np.array([0.10, 0.20, 0.30, 0.25, 0.15])
+    x = empirica_discreta(valores, probabilidades, 5000)
+    m, v = media_varianza(x)
+    mt = float(np.sum(valores * probabilidades))
+    vt = float(np.sum((valores - mt)**2 * probabilidades))
+    chi2, gl, pv, obs, exp = chi2_discreta(x, valores, probabilidades)
+    txt = (
+        f"Distribución empírica discreta\n"
+        f"Media muestral: {m:.6f}\n"
+        f"Media teórica:   {mt:.6f}\n"
+        f"Var muestral:    {v:.6f}\n"
+        f"Var teórica:     {vt:.6f}\n"
+        f"Chi2:            {chi2:.6f}\n"
+        f"gl:              {gl}\n"
+        f"p-valor:         {pv:.6f}\n"
+    )
+    guardar_texto("empirica.txt", txt)
+    plot_discreta("empirica.png", x, valores, probabilidades, titulo="Distribución empírica discreta")
+
+def correr_validaciones():
+    validar_uniforme()
+    validar_exponencial()
+    validar_gamma()
+    validar_normal()
+    validar_binomial()
+    validar_poisson()
+    validar_pascal()
+    validar_hipergeometrica()
+    validar_empirica()
+
+if __name__ == "__main__":
+    correr_validaciones()

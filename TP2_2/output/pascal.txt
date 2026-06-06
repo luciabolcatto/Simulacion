@@ -1,0 +1,8 @@
+Distribución Pascal NegBin(5,0.4)
+Media muestral: 7.404600
+Media teórica:   7.500000
+Var muestral:    18.575014
+Var teórica:     18.750000
+Chi2:            22.280827
+gl:              21
+p-valor:         0.383485

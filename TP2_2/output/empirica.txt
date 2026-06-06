@@ -1,0 +1,8 @@
+Distribución empírica discreta
+Media muestral: 3.139600
+Media teórica:   3.150000
+Var muestral:    1.423997
+Var teórica:     1.427500
+Chi2:            1.310000
+gl:              4
+p-valor:         0.859677

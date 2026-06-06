@@ -1,0 +1,8 @@
+Distribución Poisson Pois(4)
+Media muestral: 3.981600
+Media teórica:   4.000000
+Var muestral:    4.064474
+Var teórica:     4.000000
+Chi2:            15.777176
+gl:              16
+p-valor:         0.468618

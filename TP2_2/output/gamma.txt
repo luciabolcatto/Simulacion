@@ -1,0 +1,5 @@
+Distribución gamma Gamma(3,2)
+Media muestral: 5.967800
+Media teórica:   6.000000
+Var muestral:    12.493298
+Var teórica:     12.000000

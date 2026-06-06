@@ -1,0 +1,7 @@
+Distribución exponencial Exp(1.5)
+Media muestral: 0.654100
+Media teórica:   0.666667
+Var muestral:    0.417437
+Var teórica:     0.444444
+KS estadístico:   0.008120
+p-valor KS:       0.893755

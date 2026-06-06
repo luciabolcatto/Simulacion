@@ -1,0 +1,7 @@
+Distribución uniforme continua U(2,7)
+Media muestral: 4.487645
+Media teórica:   4.500000
+Var muestral:    2.061712
+Var teórica:     2.083333
+KS estadístico:   0.008120
+p-valor KS:       0.893755
